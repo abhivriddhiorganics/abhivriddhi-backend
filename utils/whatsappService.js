@@ -174,6 +174,13 @@ const initializeWhatsApp = async () => {
                     '--no-first-run',
                     '--disable-background-networking',
                     '--disable-default-apps',
+                    '--disable-sync',
+                    '--disable-translate',
+                    '--metrics-recording-only',
+                    '--mute-audio',
+                    '--no-default-browser-check',
+                    '--no-experiments',
+                    '--no-pings',
                     ...((process.env.NODE_ENV === 'production' || process.env.RENDER) ? require('@sparticuz/chromium').args : [])
                 ],
             }

@@ -13,15 +13,15 @@ const getTransporter = () => {
     return null; // not configured
   }
 
-  console.log(`[EMAIL] Initializing transporter with user: ${user} on port: ${process.env.EMAIL_PORT || 465}`);
+  console.log(`[EMAIL] Initializing transporter with user: ${user} on port: ${process.env.EMAIL_PORT || 587}`);
   _transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.EMAIL_PORT) || 465,
-    secure: true, 
+    port: parseInt(process.env.EMAIL_PORT) || 587,
+    secure: false, // Port 587 uses STARTTLS (false), Port 465 uses Secure (true)
     auth: { user, pass },
-    connectionTimeout: 10000, // 10s
-    greetingTimeout: 5000,
-    socketTimeout: 15000,
+    connectionTimeout: 20000, // Increased to 20s for cloud stability
+    greetingTimeout: 10000,
+    socketTimeout: 30000,
     tls: {
       rejectUnauthorized: false 
     }

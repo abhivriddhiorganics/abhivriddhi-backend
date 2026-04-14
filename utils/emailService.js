@@ -1,72 +1,64 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-// ── Create transporter (lazy singleton) ──────────────────────
-let _transporter = null;
+/**
+ * Email Service — powered by Resend API.
+ * Bypasses Render's SMTP blocks and provides 99.9% reliability.
+ */
 
-const getTransporter = () => {
-  if (_transporter) return _transporter;
+// Initialize Resend with the API Key
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-  const user = process.env.EMAIL_USER;
-  const pass = process.env.EMAIL_PASS;
+// Default sender for Resend Free Tier (must be verified or onboarding@resend.dev)
+const DEFAULT_FROM = process.env.RESEND_FROM || 'onboarding@resend.dev';
 
-  if (!user || user.includes('your_email') || !pass || pass.includes('your_app_password')) {
-    return null; // not configured
-  }
-
-  console.log(`[EMAIL] Initializing transporter with service: gmail for user: ${user}`);
-  _transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user, pass },
-    connectionTimeout: 20000, 
-    greetingTimeout: 10000,
-    socketTimeout: 30000,
-    tls: {
-      rejectUnauthorized: false 
-    }
-  });
-
-  console.log('✅ [EMAIL] Transporter initialized and ready for on-demand requests.');
-
-  return _transporter;
-};
-
-// ── Core send ─────────────────────────────────────────────────
+/**
+ * Core send function using Resend SDK
+ */
 const sendEmail = async ({ email, subject, html, attachments = [] }) => {
-  const transporter = getTransporter();
-
-  if (!transporter) {
-    console.log(`\n[MOCK EMAIL] To: ${email} | Subject: ${subject}`);
+  if (!process.env.RESEND_API_KEY) {
+    console.log(`\n[MOCK EMAIL] RESEND_API_KEY missing. Printing to console:`);
+    console.log(`To: ${email} | Subject: ${subject}`);
     return { success: true, messageId: `mock_${Date.now()}` };
   }
 
   try {
-    const info = await transporter.sendMail({
-      from: `"Abhivriddhi Organics 🌱" <${process.env.EMAIL_USER}>`,
+    // Transform attachments for Resend format
+    const resendAttachments = (attachments || []).map(att => ({
+      filename: att.filename,
+      content: att.content // Resend handles Buffers directly
+    }));
+
+    const { data, error } = await resend.emails.send({
+      from: `Abhivriddhi Organics 🌱 <${DEFAULT_FROM}>`,
       to: email,
       subject,
       html,
-      attachments
+      attachments: resendAttachments
     });
 
-    console.log(`✅ Email sent to ${email} | messageId: ${info.messageId}`);
-    return { success: true, messageId: info.messageId };
+    if (error) {
+      throw error;
+    }
+
+    console.log(`✅ [Resend] Email sent to ${email} | ID: ${data.id}`);
+    return { success: true, messageId: data.id };
   } catch (err) {
-    console.error(`\n❌ [EMAIL] CRITICAL FAILURE sending to ${email}:`);
+    console.error(`\n❌ [Resend] CRITICAL FAILURE sending to ${email}:`);
     console.error(`   - Error Message: ${err.message}`);
-    console.error(`   - Error Code: ${err.code}`);
-    if (err.message.includes('Invalid login') || err.message.includes('Authentication failed')) {
-      console.error('   👉 ROOT CAUSE: Gmail rejected the password. Did you use an App Password?');
-      console.error('   👉 ACTION: Ensure you are using a 16-character App Password, NOT your regular password.');
+    
+    // Check for "unverified email" error which is common on Resend Free Tier
+    if (err.message.includes('not verified') || err.message.includes('onboarding')) {
+      console.error('   👉 ROOT CAUSE: Resend Free Tier only allows sending to your own email until you verify your domain.');
+      console.error('   👉 ACTION: Go to Resend Dashboard -> Domains and verify your website domain.');
     }
-    if (err.code === 'ETIMEDOUT') {
-      console.error('   👉 ROOT CAUSE: Connection timed out. Render may be blocking port 465 or Gmail is unreachable.');
-    }
-    console.error('   - Full Stack: ' + err.stack.split('\n')[1]); // Log first line of stack for context
+
     return { success: false, error: err.message };
   }
 };
 
-// ── OTP Email ─────────────────────────────────────────────────
+/**
+ * OTP Email
+ */
 const sendOTPByEmail = async (email, otp, purpose = 'verification') => {
   const label = purpose === 'registration' ? 'Registration'
     : purpose === 'login' ? 'Login' : 'Verification';
@@ -109,14 +101,17 @@ const sendOTPByEmail = async (email, otp, purpose = 'verification') => {
 </body>
 </html>`;
 
-  console.log(`\n============================`);
-  console.log(`[EMAIL OTP] To: ${email} | Code: ${otp} | Purpose: ${label}`);
-  console.log(`============================\n`);
+  // Always log to console as a backup for Render users
+  console.log(`\n!!! EMERGENCY OTP ACCESS !!!`);
+  console.log(`🔑 YOUR ${label.toUpperCase()} CODE IS: ${otp}`);
+  console.log(`To: ${email}\n`);
 
   return await sendEmail({ email, subject, html });
 };
 
-// ── Order Confirmation Email ──────────────────────────────────
+/**
+ * Order Confirmation Email
+ */
 const sendInvoiceEmail = async (email, order, invoicePdf) => {
   const orderId = String(order._id).slice(-8).toUpperCase();
   const subject = `✅ Order Confirmed — INV-${orderId} | Abhivriddhi Organics`;
@@ -149,10 +144,8 @@ const sendInvoiceEmail = async (email, order, invoicePdf) => {
           <p><strong>Delivery Address:</strong> ${order.shippingAddress?.city}, ${order.shippingAddress?.state}</p>
         </div>
 
-        <p>Your official invoice is attached to this email as a <strong>Professional PDF document</strong>.</p>
-        
+        <p>Your official invoice is attached to this email as a PDF document.</p>
         <p>If you have any questions, feel free to reply to this email or contact us at <strong>support@abhivriddhiorganics.com</strong>.</p>
-        
         <p>Pure • Natural • Traditional</p>
         <p><strong>Abhivriddhi Organics Team</strong> 🌱</p>
       </div>
@@ -171,11 +164,10 @@ const sendInvoiceEmail = async (email, order, invoicePdf) => {
     attachments: [
       {
         filename: `Invoice-INV-${orderId}.pdf`,
-        content: invoicePdf,
-        contentType: 'application/pdf'
+        content: invoicePdf
       }
     ]
   });
 };
 
-module.exports = { sendEmail, sendOTPByEmail, sendInvoiceEmail, getTransporter };
+module.exports = { sendEmail, sendOTPByEmail, sendInvoiceEmail };

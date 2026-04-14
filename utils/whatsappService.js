@@ -1,353 +1,95 @@
-// const { Client, LocalAuth } = require('whatsapp-web.js'); // Moved to lazy load inside initializeWhatsApp
-
-const qrcode = require('qrcode-terminal');
-const fs = require('fs');
-const path = require('path');
-const { exec } = require('child_process');
-
-let client;
-let isReady = false;
-let isInitializing = false;
-let qrString = '';
-let connectionStatus = 'Disconnected'; // Disconnected, Initializing, Ready
+const axios = require('axios');
 
 /**
- * Helper to cleanup potential locks and zombie processes scoped to this app
+ * WhatsApp Service — powered by Official Meta WhatsApp Business API.
+ * Replaces the unstable whatsapp-web.js (headless browser/Puppeteer).
+ * This service is lightweight, avoids memory pressure, and works perfectly on Render.
  */
-const killBrowserProcesses = () => {
-    return new Promise((resolve) => {
-        // We only want to cleanup locks, not kill the user's actual browser
-        console.log('[WhatsApp] Skipping system-wide browser kill for stability...');
-        resolve();
-    });
-};
 
-const cleanupService = async () => {
-    try {
-        const sessionPath = path.resolve(__dirname, '../.wwebjs_auth/session');
-        if (fs.existsSync(sessionPath)) {
-            console.log('[WhatsApp] Cleaning up session locks...');
-            const lockFiles = ['SingletonLock', 'lockfile', 'DevToolsActivePort', 'SingletonCookie', 'SingletonSocket'];
-            lockFiles.forEach(file => {
-                const fullPath = path.join(sessionPath, file);
-                if (fs.existsSync(fullPath)) {
-                    try {
-                        fs.unlinkSync(fullPath);
-                    } catch (e) {}
-                }
-            });
-        }
-    } catch (err) {
-        console.warn('[WhatsApp] Cleanup warning:', err.message);
-    }
-};
+const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
+const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+const VERSION = 'v19.0';
+const BASE_URL = `https://graph.facebook.com/${VERSION}/${PHONE_NUMBER_ID}/messages`;
 
+// State simulation for API compatibility
+let isReady = !!(WHATSAPP_TOKEN && PHONE_NUMBER_ID);
+let connectionStatus = isReady ? 'Official API Connected' : 'Disconnected (Missing Keys)';
 
 /**
- * Helper to remove entire session directory for true logout
- */
-const deleteSessionData = () => {
-    return new Promise((resolve) => {
-        const authPath = path.resolve(__dirname, '../.wwebjs_auth');
-        if (fs.existsSync(authPath)) {
-            console.log('[WhatsApp] Deleting persistent session data...');
-            try {
-                // Use force and recursive to handle locks and subdirs
-                fs.rmSync(authPath, { recursive: true, force: true });
-                console.log('[WhatsApp] Session data cleared.');
-            } catch (err) {
-                console.warn('[WhatsApp] Session deletion warning:', err.message);
-            }
-        }
-        resolve();
-    });
-};
-
-/**
- * Helper to remove session locks manually
- */
-const clearSessionLocks = (sessionPath) => {
-    try {
-        const lockFiles = ['SingletonLock', 'lockfile', 'DevToolsActivePort', 'SingletonCookie', 'SingletonSocket'];
-        lockFiles.forEach(file => {
-            const fullPath = path.join(sessionPath, file);
-            if (fs.existsSync(fullPath)) {
-                console.log(`[WhatsApp] Removing lock file: ${file}`);
-                try {
-                    fs.unlinkSync(fullPath);
-                } catch (e) {
-                    console.warn(`[WhatsApp] Could not delete lock file ${file}: ${e.message}`);
-                }
-            }
-        });
-    } catch (err) {
-        if (err.code !== 'ENOENT') {
-            console.warn('[WhatsApp] Lock cleanup warning:', err.message);
-        }
-    }
-};
-
-/**
- * Initialize WhatsApp Client
+ * Initialize WhatsApp Client (Placeholder for new API)
  */
 const initializeWhatsApp = async () => {
-    if (isInitializing) {
-        console.log('[WhatsApp] Initialization already in progress, skipping...');
-        return;
-    }
-
-    isInitializing = true;
-    console.log('\n[WhatsApp] Initializing client (Stable Mode)...');
-    connectionStatus = 'Initializing';
-
-    // Safety timeout: If initialization takes > 120s, reset flag
-    const initTimeout = setTimeout(() => {
-        if (isInitializing && connectionStatus === 'Initializing') {
-            console.error('[WhatsApp] Initialization TIMEOUT (120s) - Resetting state');
-            isInitializing = false;
-            connectionStatus = 'Disconnected';
-        }
-    }, 120000);
-
-    try {
-        // --- STABLE BOOT SEQUENCE ---
-        // 1. Kill potential zombie processes
-        await killBrowserProcesses();
-        
-        // 2. Cleanup locks before starting
-        await cleanupService();
-
-        // 2. Cleanup existing client object if it exists
-        if (client) {
-            console.log('[WhatsApp] Cleaning up old client instance...');
-            try {
-                client.removeAllListeners();
-                // Attempt a quick destroy, but don't hang if it fails
-                await Promise.race([
-                    client.destroy(),
-                    new Promise(resolve => setTimeout(resolve, 2000))
-                ]).catch(() => {});
-            } catch (e) {}
-            client = null;
-        }
-
-
-        const { Client, LocalAuth } = require('whatsapp-web.js');
-        let puppeteerLib = require('puppeteer');
-        let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
-
-        // Use @sparticuz/chromium in production (Render)
-        if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
-            console.log('[WhatsApp] Cloud environment detected. Using @sparticuz/chromium...');
-            try {
-                const chromium = require('@sparticuz/chromium');
-                puppeteerLib = require('puppeteer-core');
-                executablePath = await chromium.executablePath();
-                console.log('[WhatsApp] Chromium path resolved.');
-            } catch (err) {
-                console.warn('[WhatsApp] Failed to load @sparticuz/chromium, falling back to default puppeteer.');
-            }
-        }
-        /* -------------------------------------- */
-
-        client = new Client({
-            authStrategy: new LocalAuth({
-                dataPath: './.wwebjs_auth'
-            }),
-            webVersionCache: {
-                type: 'remote',
-                remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
-            },
-            puppeteer: {
-                headless: 'new',
-                handleSIGINT: false,
-                executablePath: executablePath,
-                args: [
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-extensions',
-                    '--no-zygote',
-                    '--disable-gpu',
-                    '--single-process',
-                    '--disable-software-rasterizer',
-                    '--no-first-run',
-                    '--disable-background-networking',
-                    '--disable-default-apps',
-                    '--disable-sync',
-                    '--disable-translate',
-                    '--metrics-recording-only',
-                    '--mute-audio',
-                    '--no-default-browser-check',
-                    '--no-experiments',
-                    '--no-pings',
-                    '--js-flags="--max-old-space-size=256"',
-                    '--disable-gpu-sandbox',
-                    '--disable-web-security',
-                    ...((process.env.NODE_ENV === 'production' || process.env.RENDER) ? require('@sparticuz/chromium').args : [])
-                ],
-            }
-        });
-
-        console.log('[WhatsApp] Setting up event listeners...');
-        client.on('qr', (qr) => {
-            clearTimeout(initTimeout);
-            qrString = qr;
-            isInitializing = false;
-            connectionStatus = 'Disconnected';
-            console.log('\n🚨 ACTION REQUIRED: SCAN THE QR CODE BELOW TO ENABLE WHATSAPP');
-            qrcode.generate(qr, { small: true });
-        });
-
-        client.on('ready', () => {
-            clearTimeout(initTimeout);
-            console.log('\n✅ [WhatsApp] SYSTEM READY.');
-            isReady = true;
-            isInitializing = false;
-            qrString = '';
-            connectionStatus = 'Ready';
-        });
-
-        client.on('loading_screen', (percent, message) => {
-            console.log(`[WhatsApp] Loading: ${percent}% - ${message}`);
-        });
-
-        client.on('change_state', (state) => {
-            console.log(`[WhatsApp] State Changed: ${state}`);
-        });
-
-        client.on('authenticated', () => {
-            console.log('✅ [WhatsApp] Authenticated.');
-            isInitializing = false;
-            connectionStatus = 'Ready';
-        });
-
-        client.on('auth_failure', (msg) => {
-            clearTimeout(initTimeout);
-            console.error('❌ [WhatsApp] Auth failed:', msg);
-            isReady = false;
-            isInitializing = false;
-            connectionStatus = 'Disconnected';
-        });
-
-        client.on('disconnected', (reason) => {
-            clearTimeout(initTimeout);
-            console.log('❌ [WhatsApp] DISCONNECTED:', reason);
-            isReady = false;
-            isInitializing = false;
-            qrString = '';
-            connectionStatus = 'Disconnected';
-            // Wait before auto-reconnect
-            setTimeout(() => initializeWhatsApp(), 10000);
-        });
-
-        console.log('[WhatsApp] Attempting client initialization...');
-        // Set a timeout for initialization to prevent permanent hang
-        await Promise.race([
-            client.initialize(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Initialization Timeout')), 120000))
-        ]);
-        console.log('[WhatsApp] client.initialize() call completed.');
-
-        // Note: isInitializing will be set to false in 'ready' or 'qr' events
-    } catch (err) {
-        clearTimeout(initTimeout);
-        console.error('❌ [WhatsApp] CRITICAL ERROR:', err.message);
-        isInitializing = false;
-        connectionStatus = 'Disconnected';
-
-        // Check if it's a lock error and maybe wait longer
-        const isLockError = err.message.includes('already running');
-        const retryDelay = isLockError ? 60000 : 30000; // Slower retries to prevent crash loops
-
-        console.log(`[WhatsApp] Failure detected. Next retry in ${retryDelay / 1000}s. API remains operational.`);
-        setTimeout(() => initializeWhatsApp(), retryDelay);
+    console.log('\n[WhatsApp] Using Official Meta API Mode.');
+    if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) {
+        console.warn('⚠️ [WhatsApp] Meta API Keys missing in .env (WHATSAPP_TOKEN / PHONE_NUMBER_ID)');
+        connectionStatus = 'Disconnected (Missing Keys)';
+        isReady = false;
+    } else {
+        console.log('✅ [WhatsApp] Official API Configuration Loaded.');
+        connectionStatus = 'Official API Connected';
+        isReady = true;
     }
 };
 
 /**
- * Send WhatsApp Message
+ * Send WhatsApp Message using Meta API
+ * Handles both plain text and templates (future proof)
  */
 const sendWhatsAppMessage = async (mobile, message) => {
-    if (!isReady || !client) {
-        return { success: false, error: 'WhatsApp not ready' };
+    if (!isReady) {
+        return { success: false, error: 'WhatsApp API not configured' };
     }
 
     try {
-        const cleanNumber = mobile.replace(/\D/g, '');
-        const chatId = cleanNumber.length === 10 ? `91${cleanNumber}@c.us` : `${cleanNumber}@c.us`;
-        await client.sendMessage(chatId, message);
-        return { success: true };
+        // Format number to 91XXXXXXXXXX
+        let cleanNumber = mobile.replace(/\D/g, '');
+        if (cleanNumber.length === 10) cleanNumber = `91${cleanNumber}`;
+
+        console.log(`[WhatsApp] Sending message to ${cleanNumber}...`);
+
+        const response = await axios.post(
+            BASE_URL,
+            {
+                messaging_product: 'whatsapp',
+                to: cleanNumber,
+                type: 'text',
+                text: { body: message }
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        console.log('✅ [WhatsApp] Message sent successfully via Meta API.');
+        return { success: true, data: response.data };
     } catch (err) {
-        console.error(`❌ [WhatsApp] Send FAILED:`, err.message);
-        return { success: false, error: err.message };
+        const errorMsg = err.response?.data?.error?.message || err.message;
+        console.error('❌ [WhatsApp] Meta API Error:', errorMsg);
+        
+        // Check for common test mode errors
+        if (errorMsg.includes('not in the allow list')) {
+            console.warn('⚠️ [WhatsApp] TEST MODE ERROR: You must add this number to your Meta dashboard "To" list first.');
+        }
+
+        return { success: false, error: errorMsg };
     }
 };
 
 /**
- * Force Disconnect and Relink (Generates New QR)
- * THIS NOW DELETES OLD SESSION DATA
+ * Placeholders for API compatibility with existing Admin routes
  */
 const forceRelink = async () => {
-    try {
-        console.log('[WhatsApp] Force Logout & Relink initiated...');
-        isReady = false;
-        isInitializing = false;
-        qrString = '';
-        connectionStatus = 'Disconnected';
-
-        if (client) {
-            client.removeAllListeners();
-            await client.destroy().catch(() => { });
-            client = null;
-        }
-
-        // 1. Kill browser processes
-        await killBrowserProcesses();
-
-        // 2. Wipe physical session data to ensure new QR
-        await deleteSessionData();
-
-        // 3. Re-initialize after buffer
-        console.log('[WhatsApp] Re-initializing for new client...');
-        setTimeout(() => initializeWhatsApp(), 3000);
-        return { success: true };
-    } catch (err) {
-        console.error('[WhatsApp] Global Initialization Failure:', err);
-        isInitializing = false;
-        connectionStatus = 'Disconnected';
-        return { success: false, error: err.message };
-    }
+    console.log('[WhatsApp] Force Relink called (Meta API mode - no-op)');
+    return { success: true, message: 'Meta API is permanent and does not need relinking.' };
 };
 
-/**
- * Deep Reset (Hard Cleanup)
- */
 const hardResetWhatsApp = async () => {
-    try {
-        console.log('[WhatsApp] HARD RESET CALLED');
-        isReady = false;
-        isInitializing = false;
-        qrString = '';
-        connectionStatus = 'Disconnected';
-
-        if (client) {
-            client.removeAllListeners();
-            await client.destroy().catch(() => { });
-            client = null;
-        }
-
-        // Deep cleanup
-        await killBrowserProcesses();
-        await deleteSessionData();
-
-        // Boot after 3s cleanup window
-        setTimeout(() => initializeWhatsApp(), 3000);
-        return { success: true, message: 'Hard reset triggered' };
-    } catch (err) {
-        console.error('[WhatsApp] Hard reset failed:', err);
-        return { success: false, error: err.message };
-    }
+    console.log('[WhatsApp] Hard Reset called (Meta API mode - no-op)');
+    await initializeWhatsApp();
+    return { success: true, message: 'Meta API re-cached.' };
 };
 
 module.exports = {
@@ -357,6 +99,6 @@ module.exports = {
     hardResetWhatsApp,
     getIsWhatsAppReady: () => isReady,
     getWhatsAppStatus: () => connectionStatus,
-    getWhatsAppNumber: () => client?.info?.wid?.user || null,
-    getWhatsAppQR: () => qrString
+    getWhatsAppNumber: () => PHONE_NUMBER_ID || null,
+    getWhatsAppQR: () => '' // No QR code in Meta API mode
 };

@@ -53,11 +53,17 @@ const sendEmail = async ({ email, subject, html, attachments = [] }) => {
     console.log(`✅ Email sent to ${email} | messageId: ${info.messageId}`);
     return { success: true, messageId: info.messageId };
   } catch (err) {
-    console.error(`❌ [EMAIL] CRITICAL FAILURE sending to ${email}:`);
+    console.error(`\n❌ [EMAIL] CRITICAL FAILURE sending to ${email}:`);
     console.error(`   - Error Message: ${err.message}`);
     console.error(`   - Error Code: ${err.code}`);
-    console.error(`   - Full Stack: ${err.stack}`);
-    console.error('   👉 ACTION: Please verify your Gmail App Password in Render Env Vars.');
+    if (err.message.includes('Invalid login') || err.message.includes('Authentication failed')) {
+      console.error('   👉 ROOT CAUSE: Gmail rejected the password. Did you use an App Password?');
+      console.error('   👉 ACTION: Ensure you are using a 16-character App Password, NOT your regular password.');
+    }
+    if (err.code === 'ETIMEDOUT') {
+      console.error('   👉 ROOT CAUSE: Connection timed out. Render may be blocking port 465 or Gmail is unreachable.');
+    }
+    console.error('   - Full Stack: ' + err.stack.split('\n')[1]); // Log first line of stack for context
     return { success: false, error: err.message };
   }
 };

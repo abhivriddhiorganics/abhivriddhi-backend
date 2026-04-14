@@ -278,6 +278,9 @@ const generateInvoicePDF = async (order) => {
         '--no-default-browser-check',
         '--no-experiments',
         '--no-pings',
+        '--js-flags="--max-old-space-size=256"',
+        '--disable-gpu-sandbox',
+        '--disable-software-rasterizer',
         ...((process.env.NODE_ENV === 'production' || process.env.RENDER) ? require('@sparticuz/chromium').args : [])
       ],
       timeout: 120000 

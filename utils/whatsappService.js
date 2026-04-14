@@ -100,14 +100,14 @@ const initializeWhatsApp = async () => {
     console.log('\n[WhatsApp] Initializing client (Stable Mode)...');
     connectionStatus = 'Initializing';
 
-    // Safety timeout: If initialization takes > 60s, reset flag
+    // Safety timeout: If initialization takes > 120s, reset flag
     const initTimeout = setTimeout(() => {
         if (isInitializing && connectionStatus === 'Initializing') {
-            console.error('[WhatsApp] Initialization TIMEOUT - Resetting state');
+            console.error('[WhatsApp] Initialization TIMEOUT (120s) - Resetting state');
             isInitializing = false;
             connectionStatus = 'Disconnected';
         }
-    }, 60000);
+    }, 120000);
 
     try {
         // --- STABLE BOOT SEQUENCE ---
@@ -181,6 +181,9 @@ const initializeWhatsApp = async () => {
                     '--no-default-browser-check',
                     '--no-experiments',
                     '--no-pings',
+                    '--js-flags="--max-old-space-size=256"',
+                    '--disable-gpu-sandbox',
+                    '--disable-web-security',
                     ...((process.env.NODE_ENV === 'production' || process.env.RENDER) ? require('@sparticuz/chromium').args : [])
                 ],
             }
@@ -242,7 +245,7 @@ const initializeWhatsApp = async () => {
         // Set a timeout for initialization to prevent permanent hang
         await Promise.race([
             client.initialize(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Initialization Timeout')), 45000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Initialization Timeout')), 120000))
         ]);
         console.log('[WhatsApp] client.initialize() call completed.');
 

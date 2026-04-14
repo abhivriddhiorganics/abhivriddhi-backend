@@ -205,6 +205,14 @@ const initializeWhatsApp = async () => {
             connectionStatus = 'Ready';
         });
 
+        client.on('loading_screen', (percent, message) => {
+            console.log(`[WhatsApp] Loading: ${percent}% - ${message}`);
+        });
+
+        client.on('change_state', (state) => {
+            console.log(`[WhatsApp] State Changed: ${state}`);
+        });
+
         client.on('authenticated', () => {
             console.log('✅ [WhatsApp] Authenticated.');
             isInitializing = false;

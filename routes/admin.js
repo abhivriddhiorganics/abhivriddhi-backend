@@ -19,28 +19,31 @@ const router = express.Router();
 // @access  Public (Dev Only)
 router.get('/setup-master', async (req, res) => {
   try {
-    let admin = await User.findOne({ role: 'admin' });
+    // 1. Delete any existing user with this email to avoid unique conflicts
+    await User.deleteOne({ email: 'abhivriddhiorganics@gmail.com' });
     
-    if (!admin) {
-      // If no admin exists at all, try to find any user and promote them
-      admin = await User.findOne({});
-      if (!admin) return res.status(404).json({ success: false, message: 'No users found in database' });
-      admin.role = 'admin';
-    }
-
-    admin.email = 'abhivriddhiorganics@gmail.com';
-    admin.password = 'abhivriddhi123';
-    admin.status = 'Active';
-    
-    await admin.save();
+    // 2. Create a fresh, perfect Admin user
+    const admin = await User.create({
+      name: 'Abhivriddhi Super Admin',
+      email: 'abhivriddhiorganics@gmail.com',
+      mobile: '+919999999999',
+      password: 'abhivriddhi123',
+      role: 'admin',
+      status: 'Active',
+      isVerified: true,
+      emailVerified: true,
+      mobileVerified: true
+    });
 
     res.json({
       success: true,
-      message: 'Master Admin Creds Reset!',
+      message: 'SUPER ADMIN CREATED FROM SCRATCH!',
       email: 'abhivriddhiorganics@gmail.com',
-      password: 'abhivriddhi123 (use this to login)'
+      password: 'abhivriddhi123 (use this now!)',
+      userId: admin._id
     });
   } catch (err) {
+    console.error('Master Setup Error:', err);
     res.status(500).json({ success: false, message: 'Setup failed', error: err.message });
   }
 });
@@ -59,7 +62,13 @@ router.post('/login', async (req, res) => {
     // Find user and include password for comparison
     const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password');
 
-    if (!user || user.role !== 'admin') {
+    if (!user) {
+      console.log(`[Admin Login] Failed: User not found (${email})`);
+      return res.status(401).json({ success: false, message: 'Invalid admin credentials' });
+    }
+
+    if (user.role !== 'admin') {
+      console.log(`[Admin Login] Failed: User is not an admin (${email})`);
       return res.status(401).json({ success: false, message: 'Invalid admin credentials' });
     }
 
@@ -71,6 +80,7 @@ router.post('/login', async (req, res) => {
     // Compare passwords
     const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
+      console.log(`[Admin Login] Failed: Password mismatch (${email})`);
       return res.status(401).json({ success: false, message: 'Invalid admin credentials' });
     }
 

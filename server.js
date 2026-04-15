@@ -128,8 +128,8 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Database Debug Check
-app.get('/api/admin/debug-db', async (req, res) => {
+// Database Doctor (Public for diagnosis)
+app.get('/api/db-doctor', async (req, res) => {
   try {
     const dbName = mongoose.connection.db.databaseName;
     const collections = await mongoose.connection.db.listCollections().toArray();
@@ -140,7 +140,7 @@ app.get('/api/admin/debug-db', async (req, res) => {
       activeDatabase: dbName,
       collections: collections.map(c => c.name),
       productCount,
-      uri_provided: process.env.MONGODB_URI ? 'YES (Hidden for security)' : 'NO'
+      mongo_uri_status: process.env.MONGODB_URI ? 'LOADED' : 'MISSING'
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

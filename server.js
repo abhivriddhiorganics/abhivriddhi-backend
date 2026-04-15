@@ -130,34 +130,6 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Database Doctor (Public for diagnosis)
-app.get('/api/db-doctor', async (req, res) => {
-  try {
-    const dbName = mongoose.connection.db.databaseName;
-    const collections = await mongoose.connection.db.listCollections().toArray();
-    
-    // Check via Driver
-    const driverProductCount = await mongoose.connection.db.collection('products').countDocuments();
-    
-    // Check via Mongoose Model
-    const mongooseProducts = await Product.find({}).limit(5);
-    const uniqueCategories = [...new Set(mongooseProducts.map(p => p.category))];
-    
-    res.json({
-      success: true,
-      activeDatabase: dbName,
-      collections: collections.map(c => c.name),
-      driverProductCount,
-      mongooseProductCount: await Product.countDocuments(),
-      sampleProduct: mongooseProducts[0] ? { name: mongooseProducts[0].name, category: mongooseProducts[0].category } : 'NONE',
-      detectedCategories: uniqueCategories,
-      mongo_uri_status: process.env.MONGODB_URI ? 'LOADED' : 'MISSING'
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
 // 404 handler
 app.use('*', (req, res) => {
   res.status(404).json({

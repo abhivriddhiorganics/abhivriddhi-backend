@@ -106,10 +106,11 @@ const seedAdmin = async () => {
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/abhivriddhi')
   .then(() => {
-    console.log('MongoDB connected successfully');
+    const dbName = mongoose.connection.db.databaseName;
+    console.log(`✅ [System] MongoDB connected successfully to database: ${dbName}`);
     seedAdmin();
   })
-  .catch(err => console.error('MongoDB connection error:', err));
+  .catch(err => console.error('❌ [System] MongoDB connection error:', err));
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -127,14 +128,23 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({
-    success: false,
-    message: 'Something went wrong!',
-    error: process.env.NODE_ENV === 'development' ? err.message : {}
-  });
+// Database Debug Check
+app.get('/api/admin/debug-db', async (req, res) => {
+  try {
+    const dbName = mongoose.connection.db.databaseName;
+    const collections = await mongoose.connection.db.listCollections().toArray();
+    const productCount = await mongoose.connection.db.collection('products').countDocuments();
+    
+    res.json({
+      success: true,
+      activeDatabase: dbName,
+      collections: collections.map(c => c.name),
+      productCount,
+      uri_provided: process.env.MONGODB_URI ? 'YES (Hidden for security)' : 'NO'
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // 404 handler

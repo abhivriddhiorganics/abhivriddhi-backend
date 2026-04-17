@@ -22,11 +22,8 @@ function normalizeIdentifier(identifier, type) {
 // Validation rules
 const registerValidation = [
   body('name').trim().isLength({ min: 2, max: 50 }).withMessage('Name must be 2-50 characters'),
-  body('email')
-    .trim()
-    .toLowerCase()
-    .isEmail()
-    .withMessage('Please provide a valid email'),
+  body('email').trim().toLowerCase().isEmail().withMessage('Please provide a valid email'),
+  body('mobile').trim().isLength({ min: 10, max: 15 }).withMessage('Please provide a valid 10-digit mobile number'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
 ];
 
@@ -46,25 +43,25 @@ router.post('/register', registerValidation, async (req, res) => {
 
     let { name, email, mobile, password } = req.body;
     email = email.trim().toLowerCase();
-    mobile = mobile ? mobile.trim() : undefined;
+    mobile = mobile.trim();
     name = name.trim();
 
     // Check if user already exists
-    const query = { $or: [{ email }] };
-    if (mobile) query.$or.push({ mobile });
-    const existingUser = await User.findOne(query);
+    const existingUser = await User.findOne({ 
+      $or: [{ email }, { mobile }] 
+    });
+
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message:
-          existingUser.email === email
-            ? 'Email already registered'
-            : 'Mobile number already registered',
+        message: existingUser.email === email 
+          ? 'Email already registered' 
+          : 'Mobile number already registered',
       });
     }
 
-    // Create user (mobile is now optional)
-    const user = await User.create({ name, email, mobile: mobile || undefined, password });
+    // Create user
+    const user = await User.create({ name, email, mobile, password });
 
     // Generate OTP for email
     const otp = user.generateOTP('email');

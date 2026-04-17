@@ -82,16 +82,17 @@ const generateInvoicePDF = (order) => {
       doc.fillColor(greenTheme).fontSize(10).font('Helvetica-Bold').text('Sold By:', 40, top);
       doc.fillColor('#000').font('Helvetica').fontSize(10);
       doc.text('Abhivriddhi Organics Private Limited', 40, top + 15);
-      doc.text('102, Green Valley Estate, B-Phase', 40, top + 28);
-      doc.text('Indore, MADHYA PRADESH, 452010, IN', 40, top + 41);
-      doc.font('Helvetica-Bold').text('PAN No: ', 40, top + 56).font('Helvetica').text('ABCPD1234F', 85, top + 56);
-      doc.font('Helvetica-Bold').text('GST No: ', 40, top + 69).font('Helvetica').text('23ABCPD1234F1Z1', 85, top + 69);
+      doc.text('102, Green Valley Estate, B-Phase', 40, top + 27);
+      doc.text('Satna, MADHYA PRADESH, 452010', 40, top + 39);
+      doc.text('Phone: +91 7999598032', 40, top + 51);
+      doc.text('Email: abhivriddhiorganics@gmail.com', 40, top + 63);
+      doc.font('Helvetica-Bold').text('PAN No: ', 40, top + 77).font('Helvetica').text('ABCPD1234F', 85, top + 77);
+      doc.font('Helvetica-Bold').text('GST No: ', 40, top + 90).font('Helvetica').text('23ABCPD1234F1Z1', 85, top + 90);
 
       doc.fillColor(greenTheme).font('Helvetica-Bold').text('Billing & Shipping Address:', 300, top, { align: 'right' });
       doc.fillColor('#000').font('Helvetica').text(sa.fullName || 'Customer', 300, top + 15, { align: 'right' });
       doc.text(sa.addressLine || '', 300, top + 28, { align: 'right' });
       doc.text(`${sa.city || ''}, ${sa.state || ''}, ${sa.pincode || ''}, IN`, 300, top + 41, { align: 'right' });
-      doc.font('Helvetica-Bold').text('State Code: 23', 300, top + 56, { align: 'right' });
 
       // 3. Order Highlights Bar
       top = 210;
@@ -133,11 +134,11 @@ const generateInvoicePDF = (order) => {
         doc.font('Helvetica').fontSize(7).text(`HSN: 15159091`, 70, currentRow + 18, { width: 180 });
         
         doc.fontSize(9);
-        doc.text(`₹${(item.price / (1 + gstRate)).toFixed(2)}`, 250, currentRow + 8, { width: 40, align: 'right' });
+        doc.text(`${(item.price / (1 + gstRate)).toFixed(2)}`, 250, currentRow + 8, { width: 40, align: 'right' });
         doc.text(item.quantity, 300, currentRow + 8, { width: 30, align: 'center' });
-        doc.text(`₹${netAmt.toFixed(2)}`, 340, currentRow + 8, { width: 50, align: 'right' });
-        doc.text(`₹${taxAmt.toFixed(2)}`, 400, currentRow + 8, { width: 60, align: 'right' });
-        doc.text(`₹${itemTotal.toLocaleString('en-IN')}`, 470, currentRow + 8, { width: 75, align: 'right' });
+        doc.text(`${netAmt.toFixed(2)}`, 340, currentRow + 8, { width: 50, align: 'right' });
+        doc.text(`${taxAmt.toFixed(2)}`, 400, currentRow + 8, { width: 60, align: 'right' });
+        doc.text(`${itemTotal.toLocaleString('en-IN')}`, 470, currentRow + 8, { width: 75, align: 'right' });
 
         doc.moveTo(40, currentRow + 32).lineTo(555, currentRow + 32).strokeColor('#eee').lineWidth(0.5).stroke();
         currentRow += 32;
@@ -153,7 +154,7 @@ const generateInvoicePDF = (order) => {
       doc.rect(40, currentRow, 515, 25).fill('#eee');
       doc.fillColor('#000').font('Helvetica-Bold').fontSize(10);
       doc.text('TOTAL:', 400, currentRow + 8, { width: 60, align: 'right' });
-      doc.text(`₹${order.totalAmount.toLocaleString('en-IN')}`, 470, currentRow + 8, { width: 75, align: 'right' });
+      doc.text(`${order.totalAmount.toLocaleString('en-IN')}`, 470, currentRow + 8, { width: 75, align: 'right' });
 
       // 7. Amount in Words
       currentRow += 40;

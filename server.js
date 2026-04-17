@@ -107,9 +107,18 @@ const seedAdmin = async () => {
 };
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/abhivriddhi')
-  .then(() => {
+  .then(async () => {
     const dbName = mongoose.connection.db.databaseName;
     console.log(`✅ [System] MongoDB connected successfully to database: ${dbName}`);
+    
+    // Sync indexes to ensure 'sparse' unique mobile index is applied
+    try {
+      await User.syncIndexes();
+      console.log('  - Database indexes synchronized successfully');
+    } catch (syncErr) {
+      console.error('  - Index synchronization failed:', syncErr.message);
+    }
+
     seedAdmin();
   })
   .catch(err => console.error('❌ [System] MongoDB connection error:', err));

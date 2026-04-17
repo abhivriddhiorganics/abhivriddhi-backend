@@ -43,7 +43,13 @@ router.post('/register', registerValidation, async (req, res) => {
 
     let { name, email, mobile, password } = req.body;
     email = email.trim().toLowerCase();
+    
+    // Ensure mobile has +91 prefix for validation matching
     mobile = mobile.trim();
+    if (/^[6-9]\d{9}$/.test(mobile)) {
+      mobile = `+91${mobile}`;
+    }
+    
     name = name.trim();
 
     // Check if user already exists
@@ -279,12 +285,15 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email/mobile and password are required' });
     }
 
-    identifier = identifier.trim();
-    if (identifier.includes('@')) identifier = identifier.toLowerCase();
-
-    // Find user by email or mobile
+    // Find user by email or mobile (check both raw and +91 prefixed for mobile)
+    const mobileWithPrefix = /^[6-9]\d{9}$/.test(identifier) ? `+91${identifier}` : identifier;
+    
     const user = await User.findOne({
-      $or: [{ email: identifier }, { mobile: identifier }],
+      $or: [
+        { email: identifier.toLowerCase() }, 
+        { mobile: identifier }, 
+        { mobile: mobileWithPrefix }
+      ],
     }).select('+password');
 
     if (!user) {

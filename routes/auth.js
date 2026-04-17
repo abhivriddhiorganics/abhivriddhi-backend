@@ -308,6 +308,16 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid credentials. Please check your email/mobile and password.' });
     }
 
+    // Check verification status
+    if (!user.isVerified) {
+      return res.status(403).json({
+        success: false,
+        code: 'ACCOUNT_UNVERIFIED',
+        message: 'Your account is not verified. Please verify your email first.',
+        email: user.email
+      });
+    }
+
     const token = generateToken(user._id);
 
     res.json({

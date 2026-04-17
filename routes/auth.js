@@ -46,11 +46,13 @@ router.post('/register', registerValidation, async (req, res) => {
 
     let { name, email, mobile, password } = req.body;
     email = email.trim().toLowerCase();
-    mobile = mobile.trim();
+    mobile = mobile ? mobile.trim() : undefined;
     name = name.trim();
 
     // Check if user already exists
-    const existingUser = await User.findOne({ $or: [{ email }, { mobile }] });
+    const query = { $or: [{ email }] };
+    if (mobile) query.$or.push({ mobile });
+    const existingUser = await User.findOne(query);
     if (existingUser) {
       return res.status(400).json({
         success: false,

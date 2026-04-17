@@ -41,8 +41,9 @@ const userSchema = new mongoose.Schema({
   },
   mobile: {
     type: String,
-    required: [true, 'Mobile number is required'],
+    required: false,
     unique: true,
+    sparse: true,
     validate: {
       validator: function(mobile) {
         return /^\+91[6-9]\d{9}$/.test(mobile);

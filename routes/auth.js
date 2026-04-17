@@ -27,10 +27,6 @@ const registerValidation = [
     .toLowerCase()
     .isEmail()
     .withMessage('Please provide a valid email'),
-  body('mobile')
-    .trim()
-    .matches(/^\+91[6-9]\d{9}$/)
-    .withMessage('Please provide a valid Indian mobile number (+91XXXXXXXXXX)'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
 ];
 
@@ -65,11 +61,11 @@ router.post('/register', registerValidation, async (req, res) => {
       });
     }
 
-    // Create user
-    const user = await User.create({ name, email, mobile, password });
+    // Create user (mobile is now optional)
+    const user = await User.create({ name, email, mobile: mobile || undefined, password });
 
-    // Generate OTP
-    const otp = user.generateOTP('both');
+    // Generate OTP for email
+    const otp = user.generateOTP('email');
     await user.save();
 
     // Send OTP to email (fire-and-forget)
@@ -79,17 +75,8 @@ router.post('/register', registerValidation, async (req, res) => {
       console.error('Email OTP failed:', emailError.message);
     }
 
-    // Send OTP to mobile (fire-and-forget)
-    try {
-      await sendOTPBySMS(mobile, otp, 'registration');
-    } catch (smsError) {
-      console.error('SMS OTP failed:', smsError.message);
-    }
-
     // Save OTP record for email
     await OTP.create({ identifier: email, type: 'email', otp, purpose: 'registration' });
-    // Save OTP record for mobile
-    await OTP.create({ identifier: mobile, type: 'mobile', otp, purpose: 'registration' });
 
     res.status(201).json({
       success: true,
@@ -151,15 +138,11 @@ router.post('/send-otp', async (req, res) => {
       otp = Math.floor(100000 + Math.random() * 900000).toString();
     }
 
-    // Send OTP
-    if (type === 'email') {
-      await sendOTPByEmail(identifier, otp, purpose);
-    } else {
-      await sendOTPBySMS(identifier, otp, purpose);
-    }
+    // Send OTP (Email only)
+    await sendOTPByEmail(identifier, otp, purpose);
 
     // Save/replace OTP record
-    await OTP.create({ identifier, type, otp, purpose });
+    await OTP.create({ identifier, type: 'email', otp, purpose });
 
     res.json({
       success: true,
@@ -254,13 +237,8 @@ router.post('/verify-otp', async (req, res) => {
     }
 
     if (purpose === 'registration') {
-      if (type === 'email') user.emailVerified = true;
-      else user.mobileVerified = true;
-
-      // Mark fully verified if both done
-      if (user.emailVerified && user.mobileVerified) {
-        user.isVerified = true;
-      }
+      user.emailVerified = true;
+      user.isVerified = true;
       await user.save();
     }
 
@@ -413,15 +391,11 @@ router.post('/forgot-password', async (req, res) => {
     const otp = user.generateOTP(type);
     await user.save();
 
-    // Send OTP
-    if (type === 'email') {
-      await sendOTPByEmail(identifier, otp, 'password-reset');
-    } else {
-      await sendOTPBySMS(identifier, otp, 'password-reset');
-    }
+    // Send OTP (Email only)
+    await sendOTPByEmail(identifier, otp, 'password-reset');
 
     // Save OTP record for verification
-    await OTP.create({ identifier, type, otp, purpose: 'password-reset' });
+    await OTP.create({ identifier, type: 'email', otp, purpose: 'password-reset' });
 
     res.json({
       success: true,

@@ -4,6 +4,7 @@ const Order = require('../models/Order');
 const Product = require('../models/Product');
 const { protect, authorize } = require('../middleware/auth');
 const { generateToken } = require('../utils/jwt');
+const SiteSettings = require('../models/SiteSettings');
 const { 
   getWhatsAppStatus, 
   getWhatsAppQR, 
@@ -328,6 +329,25 @@ router.delete('/sub-admins/:id', async (req, res) => {
   }
 });
 
+// @route   GET /api/admin/settings
+// @desc    Get public site settings
+// @access  Public
+router.get('/settings', async (req, res) => {
+  try {
+    let settings = await SiteSettings.findOne();
+    if (!settings) {
+      console.log('[Admin] Initializing SiteSettings with defaults...');
+      settings = await SiteSettings.create({
+        announcementBar: ['100% Organic', 'Gluten Free', 'Chemical Free', 'No Sugar Added']
+      });
+    }
+    res.json({ success: true, settings });
+  } catch (err) {
+    console.error('[Admin] Settings fetch error:', err);
+    res.status(500).json({ success: false, message: 'Internal server error while fetching settings' });
+  }
+});
+
 // All admin routes below must be restricted to 'admin' role
 router.use(protect, authorize('admin'));
 
@@ -509,17 +529,22 @@ const deleteFromCloudinary = async (publicId) => {
 router.post('/products', upload.any(), async (req, res) => {
   try {
     const { name, category, description, shortDescription, benefits, price, inStock, weights } = req.body;
+    const files = req.files || [];
+    // Map files by fieldname (essential when using upload.any())
+    const image      = files.find(f => f.fieldname === 'image');
+    const backImage  = files.find(f => f.fieldname === 'backImage');
+    const sideImage  = files.find(f => f.fieldname === 'sideImage');
+
     console.log(`[Admin] Product creation request received: "${name}"`);
-    console.log(`  - Short Desc: ${shortDescription ? 'YES' : 'NO'} (${shortDescription?.substring(0, 20)}...)`);
-    console.log(`  - Benefits: ${benefits ? 'YES' : 'NO'}`);
+    console.log(`  - Files received: ${files.length} (${files.map(f => f.fieldname).join(', ')})`);
     
     // Cloudinary gives us secure_url and public_id
-    const imageUrl       = req.files?.image?.[0]?.path || '';
-    const imagePublicId  = req.files?.image?.[0]?.filename || '';
-    const backImageUrl      = req.files?.backImage?.[0]?.path || '';
-    const backImagePublicId = req.files?.backImage?.[0]?.filename || '';
-    const sideImageUrl      = req.files?.sideImage?.[0]?.path || '';
-    const sideImagePublicId = req.files?.sideImage?.[0]?.filename || '';
+    const imageUrl       = image?.path || '';
+    const imagePublicId  = image?.filename || '';
+    const backImageUrl      = backImage?.path || '';
+    const backImagePublicId = backImage?.filename || '';
+    const sideImageUrl      = sideImage?.path || '';
+    const sideImagePublicId = sideImage?.filename || '';
 
     let parsedWeights = [];
     if (weights) {
@@ -729,5 +754,27 @@ router.get('/stats/advanced', async (req, res) => {
 // End of routes
 
 // End of routes
+
+// @route   PUT /api/admin/settings
+// @desc    Update site settings
+// @access  Private/Admin
+router.put('/settings', async (req, res) => {
+  try {
+    const { announcementBar } = req.body;
+    
+    let settings = await SiteSettings.findOne();
+    if (!settings) {
+      settings = new SiteSettings();
+    }
+    
+    if (announcementBar) settings.announcementBar = announcementBar;
+    settings.updatedAt = Date.now();
+    
+    await settings.save();
+    res.json({ success: true, message: 'Settings updated successfully', settings });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to update settings' });
+  }
+});
 
 module.exports = router;

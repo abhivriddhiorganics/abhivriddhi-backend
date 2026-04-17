@@ -101,10 +101,10 @@ const generateInvoicePDF = (order) => {
       doc.fillColor(greenTheme).font('Helvetica-Bold').fontSize(9);
       doc.text('Order Number:', 50, top + 10);
       doc.fillColor('#000').font('Helvetica').text(orderId, 120, top + 10);
-      doc.fillColor(greenTheme).font('Helvetica-Bold').text('Order Date:', 200, top + 10);
-      doc.fillColor('#000').font('Helvetica').text(date, 260, top + 10);
-      doc.fillColor(greenTheme).font('Helvetica-Bold').text('Invoice No:', 350, top + 10);
-      doc.fillColor('#000').font('Helvetica').text(`INV-${orderId}`, 410, top + 10);
+      doc.fillColor(greenTheme).font('Helvetica-Bold').text('Transaction ID:', 180, top + 10);
+      doc.fillColor('#000').font('Helvetica').text(order.paymentInfo?.id || 'Prepaid', 250, top + 10);
+      doc.fillColor(greenTheme).font('Helvetica-Bold').text('Invoice No:', 380, top + 10);
+      doc.fillColor('#000').font('Helvetica').text(`INV-${orderId}`, 440, top + 10);
 
       // 4. Table Header
       top = 295;
@@ -126,7 +126,7 @@ const generateInvoicePDF = (order) => {
         doc.fillColor('#000').font('Helvetica').fontSize(9);
         doc.text(index + 1, 45, currentRow + 8);
         doc.font('Helvetica-Bold').text(item.name, 75, currentRow + 8, { width: 280 });
-        doc.font('Helvetica').fontSize(7).text(`HSN: 15159091`, 75, currentRow + 18, { width: 280 });
+        doc.font('Helvetica').fontSize(7).text(`PID: ${item.productId} | HSN: 15159091`, 75, currentRow + 18, { width: 280 });
         
         doc.fontSize(9);
         doc.text(`${item.price.toFixed(2)}`, 365, currentRow + 8, { width: 50, align: 'right' });

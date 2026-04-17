@@ -29,6 +29,10 @@ const orderSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  shippingFee: {
+    type: Number,
+    default: 0
+  },
   paymentInfo: {
     id: { type: String }, // Razorpay payment ID
     orderId: { type: String }, // Razorpay order ID

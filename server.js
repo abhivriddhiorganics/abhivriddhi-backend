@@ -138,6 +138,27 @@ app.use('*', (req, res) => {
   });
 });
 
+// Global Error Handler (CRITICAL: MUST REACH THIS FOR ALL ERRORS)
+app.use((err, req, res, next) => {
+  console.error('\n❌ [SYSTEM ERROR]:', err.stack || err.message);
+  
+  // Force JSON headers to prevent HTML crash in frontend
+  res.setHeader('Content-Type', 'application/json');
+  
+  // Map specific errors to appropriate status codes
+  let status = err.status || 500;
+  if (err.name === 'MulterError' && err.code === 'LIMIT_UNEXPECTED_FIELD') {
+    status = 400; // Client sent a field the server wasn't expecting
+  }
+  
+  res.status(status).json({
+    success: false,
+    message: err.message || 'An internal server error occurred',
+    error: process.env.NODE_ENV === 'development' ? err.stack : (err.name || 'Server Error'),
+    code: err.code || 'UNKNOWN'
+  });
+});
+
 const PORT = process.env.PORT || 2000;
 const HOST = '0.0.0.0';
 const server = app.listen(PORT, HOST, () => {

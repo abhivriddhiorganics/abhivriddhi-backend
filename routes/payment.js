@@ -38,7 +38,7 @@ const razorpay = new Razorpay({
 // @desc    Create Razorpay order + save shipping details to DB
 router.post('/checkout', async (req, res) => {
   try {
-    const { shippingAddress, cartItems, totalAmount, userId } = req.body;
+    const { shippingAddress, cartItems, totalAmount, shippingFee, userId } = req.body;
 
     if (!shippingAddress || !cartItems || !totalAmount) {
       return res.status(400).json({ success: false, message: 'Missing required order details' });
@@ -50,6 +50,7 @@ router.post('/checkout', async (req, res) => {
       shippingAddress,
       orderItems: cartItems,
       totalAmount,
+      shippingFee: shippingFee || 0,
       orderStatus: 'Payment Pending',
       paymentInfo: { status: 'Pending' }
     });

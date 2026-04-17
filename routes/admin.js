@@ -147,6 +147,23 @@ router.get('/seed-products', async (req, res) => {
   }
 });
 
+// @route   GET /api/admin/migrate-descriptions
+// @desc    One-time migration: add empty shortDescription and benefits to all products missing them
+router.get('/migrate-descriptions', async (req, res) => {
+  try {
+    const result = await Product.updateMany(
+      { $or: [
+        { shortDescription: { $exists: false } },
+        { benefits: { $exists: false } }
+      ]},
+      { $set: { shortDescription: '', benefits: '' } }
+    );
+    res.json({ success: true, message: `Migrated ${result.modifiedCount} products.`, result });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // @route   GET /api/admin/migrate-weights
 // @desc    One-time migration: add default weight variants to all products without weights
 router.get('/migrate-weights', async (req, res) => {
@@ -431,6 +448,18 @@ router.get('/orders', async (req, res) => {
   }
 });
 
+// @route   GET /api/admin/products
+// @desc    Get all products for management
+// @access  Private/Admin
+router.get('/products', async (req, res) => {
+  try {
+    const products = await Product.find({}).sort({ createdAt: -1 });
+    res.json({ success: true, count: products.length, products });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to retrieve products' });
+  }
+});
+
 // @route   PUT /api/admin/orders/:id/status
 // @desc    Update order status
 // @access  Private/Admin
@@ -476,31 +505,44 @@ const deleteFromCloudinary = async (publicId) => {
 
 // @route   POST /api/admin/products
 // @desc    Add new product — image goes to Cloudinary
-router.post('/products', upload.fields([{ name: 'image', maxCount: 1 }, { name: 'backImage', maxCount: 1 }]), async (req, res) => {
+// upload.any() allows any number of images without "Unexpected field" crashes
+router.post('/products', upload.any(), async (req, res) => {
   try {
-    const { name, category, description, price, inStock, weights } = req.body;
+    const { name, category, description, shortDescription, benefits, price, inStock, weights } = req.body;
+    console.log(`[Admin] Product creation request received: "${name}"`);
+    console.log(`  - Short Desc: ${shortDescription ? 'YES' : 'NO'} (${shortDescription?.substring(0, 20)}...)`);
+    console.log(`  - Benefits: ${benefits ? 'YES' : 'NO'}`);
     
     // Cloudinary gives us secure_url and public_id
     const imageUrl       = req.files?.image?.[0]?.path || '';
     const imagePublicId  = req.files?.image?.[0]?.filename || '';
     const backImageUrl      = req.files?.backImage?.[0]?.path || '';
     const backImagePublicId = req.files?.backImage?.[0]?.filename || '';
+    const sideImageUrl      = req.files?.sideImage?.[0]?.path || '';
+    const sideImagePublicId = req.files?.sideImage?.[0]?.filename || '';
 
     let parsedWeights = [];
     if (weights) {
       try { parsedWeights = JSON.parse(weights); } catch (e) {}
     }
 
+    const currentShortDesc = shortDescription || req.body.shortDescription || '';
+    const currentBenefits = benefits || req.body.benefits || '';
+
     const product = await Product.create({
       name,
       category,
       description,
+      shortDescription: currentShortDesc,
+      benefits: currentBenefits,
       price: Number(price),
       inStock: inStock === 'true' || inStock === true,
       imageUrl,
       imagePublicId,
       backImageUrl,
       backImagePublicId,
+      sideImageUrl,
+      sideImagePublicId,
       weights: parsedWeights
     });
 
@@ -513,42 +555,77 @@ router.post('/products', upload.fields([{ name: 'image', maxCount: 1 }, { name: 
 
 // @route   PUT /api/admin/products/:id
 // @desc    Update product — new images replace old on Cloudinary
-router.put('/products/:id', upload.fields([{ name: 'image', maxCount: 1 }, { name: 'backImage', maxCount: 1 }]), async (req, res) => {
+// upload.any() is used to prevent "MulterError: Unexpected Field" crashes
+router.put('/products/:id', upload.any(), async (req, res) => {
   try {
-    const { name, category, description, price, inStock, weights,
-            imageUrl: existingImageUrl, backImageUrl: existingBackImageUrl,
-            imagePublicId: existingImagePublicId, backImagePublicId: existingBackImagePublicId } = req.body;
+    const files = req.files || [];
+    // Map files back to their semantic names for the update logic
+    const image      = files.find(f => f.fieldname === 'image');
+    const backImage  = files.find(f => f.fieldname === 'backImage');
+    const sideImage  = files.find(f => f.fieldname === 'sideImage');
+
+    console.log(`[Admin] Product update request received for ID: ${req.params.id}`);
+    console.log('[Admin] RAW req.body:', JSON.stringify(req.body, null, 2));
+    console.log('[Admin] Received FILES:', files.map(f => f.fieldname).join(', ') || 'NONE');
     
+    const { 
+      name, category, description, shortDescription, benefits, price, inStock, weights,
+      imageUrl: existingImageUrl, backImageUrl: existingBackImageUrl, sideImageUrl: existingSideImageUrl,
+      imagePublicId: existingImagePublicId, backImagePublicId: existingBackImagePublicId, sideImagePublicId: existingSideImagePublicId 
+    } = req.body;
+    
+    console.log(`  - Short Desc from body: "${shortDescription}"`);
+    console.log(`  - Benefits from body: "${benefits}"`);
+    
+    const currentShortDesc = shortDescription || req.body.shortDescription || '';
+    const currentBenefits = benefits || req.body.benefits || '';
+
     const updateData = {
-      name,
-      category,
-      description,
-      price: Number(price),
+      name: name || '',
+      category: category || 'Atta',
+      description: description || '',
+      shortDescription: currentShortDesc,
+      benefits: currentBenefits,
+      price: Number(price) || 0,
       inStock: inStock === 'true' || inStock === true
     };
 
     // Handle Front Image — delete old from Cloudinary if new one uploaded
-    if (req.files?.image) {
+    if (image) {
       await deleteFromCloudinary(existingImagePublicId);
-      updateData.imageUrl      = req.files.image[0].path;
-      updateData.imagePublicId = req.files.image[0].filename;
+      updateData.imageUrl      = image.path;
+      updateData.imagePublicId = image.filename;
     } else if (existingImageUrl) {
       updateData.imageUrl      = existingImageUrl;
       updateData.imagePublicId = existingImagePublicId;
     }
 
     // Handle Back Image
-    if (req.files?.backImage) {
+    if (backImage) {
       await deleteFromCloudinary(existingBackImagePublicId);
-      updateData.backImageUrl      = req.files.backImage[0].path;
-      updateData.backImagePublicId = req.files.backImage[0].filename;
+      updateData.backImageUrl      = backImage.path;
+      updateData.backImagePublicId = backImage.filename;
     } else if (existingBackImageUrl) {
       updateData.backImageUrl      = existingBackImageUrl;
       updateData.backImagePublicId = existingBackImagePublicId;
     }
 
+    // Handle Side Image
+    if (sideImage) {
+      await deleteFromCloudinary(existingSideImagePublicId);
+      updateData.sideImageUrl      = sideImage.path;
+      updateData.sideImagePublicId = sideImage.filename;
+    } else if (existingSideImageUrl) {
+      updateData.sideImageUrl      = existingSideImageUrl;
+      updateData.sideImagePublicId = existingSideImagePublicId;
+    }
+
     if (weights) {
-      try { updateData.weights = JSON.parse(weights); } catch (e) {}
+      try { 
+        updateData.weights = typeof weights === 'string' ? JSON.parse(weights) : weights; 
+      } catch (e) {
+        console.error('[Admin] Weights parse error:', e.message);
+      }
     }
 
     const product = await Product.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
@@ -570,6 +647,7 @@ router.delete('/products/:id', async (req, res) => {
     // Delete images from Cloudinary
     await deleteFromCloudinary(product.imagePublicId);
     await deleteFromCloudinary(product.backImagePublicId);
+    await deleteFromCloudinary(product.sideImagePublicId);
 
     await Product.findByIdAndDelete(req.params.id);
     res.json({ success: true, message: 'Product and its images deleted successfully' });

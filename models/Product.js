@@ -10,7 +10,15 @@ const productSchema = new mongoose.Schema({
   description: {
     type: String,
     required: [true, 'Product description is required'],
-    maxlength: [1000, 'Description cannot exceed 1000 characters']
+    maxlength: [2000, 'Description cannot exceed 2000 characters']
+  },
+  shortDescription: {
+    type: String,
+    maxlength: [200, 'Short description cannot exceed 200 characters']
+  },
+  benefits: {
+    type: String,
+    maxlength: [1000, 'Benefits cannot exceed 1000 characters']
   },
   category: {
     type: String,
@@ -41,6 +49,12 @@ const productSchema = new mongoose.Schema({
   },
   backImagePublicId: {
     type: String  // Cloudinary public_id for back image deletion
+  },
+  sideImageUrl: {
+    type: String
+  },
+  sideImagePublicId: {
+    type: String  // Cloudinary public_id for side image deletion
   },
   ratings: {
     type: Number,
@@ -78,6 +92,10 @@ productSchema.virtual('img').get(function() {
 
 productSchema.virtual('backImg').get(function() {
   return this.backImageUrl;
+});
+
+productSchema.virtual('sideImg').get(function() {
+  return this.sideImageUrl;
 });
 
 // Ensure virtuals are serialized
